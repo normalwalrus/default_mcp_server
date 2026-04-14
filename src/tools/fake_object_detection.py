@@ -1,8 +1,9 @@
 """
-Object detection tool (stub).
+Fake object detection tool for testing purposes.
 
-Accepts an image_id (from the image store) or image/video bytes, draws random bounding boxes with
-labels, and returns the processed file with annotations and detection metadata.
+This tool randomly adds labels to images or videos to simulate object detection
+results without calling an external endpoint. This is useful for testing the
+agent and tool calling functionality.
 """
 
 import logging
@@ -16,16 +17,13 @@ from fastmcp.utilities.types import Image  # MCP Image type
 
 from tools.image_store import get_image
 from tools.video_store import get_video
-import httpx
-import os
-import base64
 
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] [%(name)s] %(message)s",
 )
 
-logger = logging.getLogger("mcp-object-detection")
+logger = logging.getLogger("mcp-fake-object-detection")
 
 # Directory where received and annotated images are saved for verification
 _SAVE_DIR = Path("saved_images")
@@ -99,12 +97,12 @@ def _draw_random_detections(
     return annotated, detections
 
 
-def detect_objects_in_image(
+def fake_detect_objects(
     media_input,
     num_boxes: int = 3
 ) -> tuple:
     """
-    Draw random bounding boxes on a stored image or video (stub for real object detection).
+    Randomly add labels to a stored image or video for testing purposes.
 
     Parameters
     ----------
@@ -122,7 +120,7 @@ def detect_objects_in_image(
     Raises
     ------
     ValueError
-        If the ``media_id`` is not found in the store or invalid input is provided.
+        If the ``media_input`` is not found in the store or invalid input is provided.
     """
     if isinstance(media_input, str):
         # Handle the case where media_id is passed
@@ -143,16 +141,10 @@ def detect_objects_in_image(
         if media_type == "image":
             pil_image = PILImage.open(BytesIO(media_bytes)).convert("RGB")
         else:  # video
-            # For video processing in the stub, return placeholder detections
-            logger.info("Processing video file (stub)...")
+            # For video processing in the fake tool, return placeholder detections
+            logger.info("Processing video file (fake detection)...")
             
-            # Placeholder for video processing
-            # In a real implementation, you would:
-            # 1. Extract frames from the video
-            # 2. Process each frame with object detection
-            # 3. Reconstruct the video with annotations
-            
-            # For now, return the original video bytes with fake detections
+            # Generate random detections for video
             detections = []
             for i in range(num_boxes):
                 class_name = random.choice(_FAKE_CLASSES)
@@ -167,7 +159,7 @@ def detect_objects_in_image(
                 })
             
             logger.info(f"Generated {len(detections)} random detection(s) for video.")
-            # Return a placeholder image for the video case in the stub
+            # Return a placeholder image for the video case in the fake tool
             # Create a simple placeholder image
             placeholder_img = PILImage.new('RGB', (640, 480), color=(73, 109, 137))
             buffer = BytesIO()
@@ -177,16 +169,44 @@ def detect_objects_in_image(
             return mcp_image, detections
     elif isinstance(media_input, bytes):
         # Handle the case where media bytes are passed directly
-        # Assume it's an image for direct bytes input
-        pil_image = PILImage.open(BytesIO(media_input)).convert("RGB")
-        media_id = f"bytes_{int(time.time() * 1000)}"
-        media_type = "image"
+        # Try to open as image first, if that fails, treat as video
+        try:
+            pil_image = PILImage.open(BytesIO(media_input)).convert("RGB")
+            media_id = f"bytes_{int(time.time() * 1000)}"
+            media_type = "image"
+        except Exception:
+            # If opening as image fails, treat as video
+            logger.info("Processing video bytes (fake detection)...")
+            
+            # Generate random detections for video
+            detections = []
+            for i in range(num_boxes):
+                class_name = random.choice(_FAKE_CLASSES)
+                confidence = round(random.uniform(0.50, 0.99), 2)
+                
+                detections.append({
+                    "frame": i,
+                    "class": class_name,
+                    "confidence": confidence,
+                    "bbox": [random.randint(0, 100), random.randint(0, 100),
+                             random.randint(100, 200), random.randint(100, 200)],
+                })
+            
+            logger.info(f"Generated {len(detections)} random detection(s) for video.")
+            # Return a placeholder image for the video case in the fake tool
+            # Create a simple placeholder image
+            placeholder_img = PILImage.new('RGB', (640, 480), color=(73, 109, 137))
+            buffer = BytesIO()
+            placeholder_img.save(buffer, format="JPEG", quality=85)
+            annotated_bytes = buffer.getvalue()
+            mcp_image = Image(data=annotated_bytes, format="jpeg")
+            return mcp_image, detections
     else:
         raise ValueError("Input must be either a media_id string or media bytes")
     
     if media_type == "image":
         logger.info(
-            "Running (stub) object detection on image %s (%dx%d) …",
+            "Running (fake) object detection on image %s (%dx%d) …",
             media_id,
             pil_image.width,
             pil_image.height,
@@ -216,108 +236,6 @@ def detect_objects_in_image(
 
         return mcp_image, detections
     
-    # This return is just to satisfy the linter, as video case is handled earlier
-    return None, []
-
-
-async def detect_objects_with_external_api(media_id: str):
-    """
-    Call an external API to perform object detection on an image or video.
-
-    Args:
-        media_id: The ID of the image or video to process.
-
-    Returns:
-        The annotated media with bounding boxes and detection metadata from the external API.
-    """
-    import httpx
-    import os
-    from fastmcp.utilities.types import Image  # MCP Image type
-    from tools.image_store import get_image
-    from tools.video_store import get_video
-    
-    # Determine if the media_id corresponds to an image or video
-    # First try to get it from the image store
-    media_bytes = get_image(media_id)
-    media_type = "image"
-    
-    if media_bytes is None:
-        # If not found in image store, try video store
-        media_bytes = get_video(media_id)
-        media_type = "video"
-    
-    if media_bytes is None:
-        raise ValueError(f"Media with id '{media_id}' not found in the stores. Upload it first using the upload_image or upload_video tool.")
-    
-    # Get the external API URL from environment variables, with a default fallback
-    external_api_url = os.getenv("EXTERNAL_OBJECT_DETECTION_API_URL", "http://localhost:8001/detect")
-    
-    # Determine the file extension and MIME type based on media type
-    if media_type == "image":
-        file_extension = ".jpg"
-        mime_type = "image/jpeg"
-    else:  # video
-        file_extension = ".mp4"  # default video extension
-        mime_type = "video/mp4"  # default video mime type
-    
-    # Prepare the file for upload
-    filename = f"media{file_extension}"
-    files = {"file": (filename, media_bytes, mime_type)}
-    
-    # Make the async request to the external API
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        try:
-            response = await client.post(external_api_url, files=files)
-            response.raise_for_status()  # Raise an exception for bad status codes
-            
-            # Parse the response - assuming the API returns JSON with media data and detections
-            result = response.json()
-            
-            # Extract the annotated media and detections from the response
-            # This assumes the external API returns a structure like:
-            # {
-            #   "annotated_media": <base64_encoded_media>,
-            #   "detections": [...]
-            # }
-            
-            if "annotated_media" in result:
-                # If the API returns a base64 encoded media
-                annotated_media_data = base64.b64decode(result["annotated_media"])
-            elif "annotated_image" in result and media_type == "image":
-                # For backward compatibility with image-only response
-                annotated_media_data = base64.b64decode(result["annotated_image"])
-            elif "annotated_video" in result and media_type == "video":
-                # For video-specific response
-                annotated_media_data = base64.b64decode(result["annotated_video"])
-            elif "media_bytes" in result:
-                # If the API returns raw bytes
-                annotated_media_data = result["media_bytes"]
-            else:
-                # If the API returns the media in a different format, adjust accordingly
-                raise ValueError("External API did not return media data in expected format")
-            
-            detections = result.get("detections", [])
-            
-            # Create an appropriate MCP object based on media type
-            if media_type == "image":
-                mcp_media = Image(data=annotated_media_data, format="jpeg")
-            else:  # video
-                # For video, we might need to handle differently depending on the MCP framework
-                # For now, we'll still return as an Image object, but in a real implementation
-                # you might need a different approach for video handling
-                mcp_media = Image(data=annotated_media_data, format="mp4")
-            
-            logger.info(f"Object detection completed via external API for {media_type}: {len(detections)} object(s) found.")
-            
-            return [mcp_media, {"detections": detections}]
-        
-        except httpx.RequestError as e:
-            logger.error(f"Error connecting to external object detection API: {str(e)}")
-            raise ValueError(f"Could not connect to external object detection API: {str(e)}")
-        except httpx.HTTPStatusError as e:
-            logger.error(f"External API returned error status {e.response.status_code}: {str(e)}")
-            raise ValueError(f"External API error: {e.response.status_code} - {str(e)}")
-        except Exception as e:
-            logger.error(f"Unexpected error during object detection: {str(e)}")
-            raise ValueError(f"Object detection failed: {str(e)}")
-
+    # This should not be reached due to early returns in video cases,
+    # but included for completeness
+    raise ValueError(f"Unsupported media type: {media_type}")

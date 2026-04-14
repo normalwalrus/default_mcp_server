@@ -1,6 +1,8 @@
 from fastmcp import FastMCP
 from tools.object_detection import detect_objects_in_image
+from tools.fake_object_detection import fake_detect_objects
 from tools.image_store import store_image, list_images
+from tools.video_store import store_video, list_videos
 import logging
 
 logging.basicConfig(
@@ -47,44 +49,77 @@ def list_uploaded_images() -> list[str]:
     logger.info(f"Listed {len(ids)} stored image(s).")
     return ids
 
-
 @mcp.tool(
-    name="fake_object_detection",
-    description="Perform object detection on a previously uploaded image. Pass the image_id returned by upload_image. Returns the annotated image with bounding boxes and a list of detected objects.",
+    name="upload_video",
+    description="Upload a base64-encoded video to the server and receive a short video_id. Use this to store videos before passing them to other tools like object_detection.",
 )
-def fake_object_detection(image_id: str):
+def upload_video(video_base64: str) -> str:
     """
-    Run object detection on a previously uploaded image.
+    Upload a base64-encoded video and get back a short video_id.
 
     Args:
-        image_id: The ID returned by the upload_image tool.
-        num_boxes: Number of objects to detect (default 3).
+        video_base64: The video as a base64 string (data-URL prefix is stripped automatically).
 
     Returns:
-        The annotated image with bounding boxes and detection metadata.
+        A short video_id string that can be passed to other tools.
     """
-    mcp_image, detections = detect_objects_in_image(image_id)
-    logger.info(f"Object detection completed: {len(detections)} object(s) found.")
+    video_id = store_video(video_base64)
+    logger.info(f"Video uploaded with id: {video_id}")
+    return video_id
 
-    return [mcp_image, {"detections": detections}]
+
+@mcp.tool(
+    name="list_uploaded_videos",
+    description="List all video IDs currently stored on the server.",
+)
+def list_uploaded_videos() -> list[str]:
+    """
+    List all stored video IDs.
+
+    Returns:
+        A list of video_id strings.
+    """
+    ids = list_videos()
+    logger.info(f"Listed {len(ids)} stored video(s).")
+    return ids
+
+
+@ mcp.tool(
+    name="fake_object_detection",
+    description="Perform fake object detection on a previously uploaded image or video for testing purposes. Pass the media_id returned by upload_image or upload_video. Returns the annotated media with bounding boxes and a list of randomly generated detected objects.",
+)
+def fake_object_detection(media_id: str):
+    """
+    Run fake object detection on a previously uploaded image or video for testing purposes.
+    
+    Args:
+        media_id: The ID returned by the upload_image or upload_video tool.
+    
+    Returns:
+        The annotated media with bounding boxes and detection metadata.
+    """
+    mcp_result, detections = fake_detect_objects(media_id)
+    logger.info(f"Fake object detection completed: {len(detections)} object(s) found.")
+
+    return [mcp_result, {"detections": detections}]
 
 
 @mcp.tool(
     name="object_detection",
-    description="Perform object detection on a previously uploaded image. Pass the image_id returned by upload_image. Returns the annotated image with bounding boxes and a list of detected objects.",
+    description="Perform object detection on a previously uploaded image or video. Pass the media_id returned by upload_image or upload_video. Returns the annotated media with bounding boxes and a list of detected objects.",
 )
-async def object_detection(image_id: str):
+async def object_detection(media_id: str):
     """
-    Run object detection on a previously uploaded image by calling an external API.
-
+    Run object detection on a previously uploaded image or video by calling an external API.
+    
     Args:
-        image_id: The ID returned by the upload_image tool.
-
+        media_id: The ID returned by the upload_image or upload_video tool.
+    
     Returns:
-        The annotated image with bounding boxes and detection metadata.
+        The annotated media with bounding boxes and detection metadata.
     """
     from tools.object_detection import detect_objects_with_external_api
-    result = await detect_objects_with_external_api(image_id)
+    result = await detect_objects_with_external_api(media_id)
     return result
 
 
