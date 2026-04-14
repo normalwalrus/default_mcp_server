@@ -13,6 +13,7 @@ services:
     networks:
       - agent
     ports:
-      - "8000:8000"
+      - "${PORT:-8000}:8000"
     volumes:
       - ./src:/app/src
+    command: ["uv", "run", "src/server.py"]

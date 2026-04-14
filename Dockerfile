@@ -18,5 +18,3 @@ RUN uv sync --no-install-project
 COPY ./src ./src
 
 EXPOSE 8000
-
-CMD ["uv", "run", "src/server.py"]

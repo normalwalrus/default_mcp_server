@@ -353,3 +353,58 @@ class S3Manager:
         except Exception as e:
             logger.error("Unexpected error during S3 deletion: %s", str(e))
             raise S3OperationError(f"Unexpected error during deletion: {str(e)}") from e
+
+    def list_objects(self, prefix: str = ""):
+        """
+        Lists objects in the S3 bucket with an optional prefix.
+
+        Args:
+            prefix (str): Optional prefix to filter objects
+
+        Returns:
+            list: List of object keys
+        """
+        try:
+            self._ensure_connection()
+            logger.info("Listing objects in s3://%s with prefix '%s'", self.bucket, prefix)
+            
+            response = self.s3.list_objects_v2(
+                Bucket=self.bucket,
+                Prefix=prefix
+            )
+            
+            if 'Contents' in response:
+                objects = [obj['Key'] for obj in response['Contents']]
+                logger.info("Found %d objects in bucket %s", len(objects), self.bucket)
+                return objects
+            else:
+                logger.info("No objects found in bucket %s with prefix '%s'", self.bucket, prefix)
+                return []
+                
+        except ClientError as e:
+            error_code = e.response.get("Error", {}).get("Code", "Unknown")
+            error_message = e.response.get("Error", {}).get("Message", str(e))
+
+            if error_code == "NoSuchBucket":
+                logger.error("Bucket does not exist: %s", self.bucket)
+                raise S3OperationError(f"Bucket does not exist: {self.bucket}") from e
+            if error_code == "AccessDenied":
+                logger.error("Access denied for bucket: %s", self.bucket)
+                raise S3OperationError(
+                    f"Access denied. Check permissions for bucket: {self.bucket}"
+                ) from e
+
+            logger.error(
+                "S3 client error during list_objects: %s - %s", error_code, error_message
+            )
+            raise S3OperationError(
+                f"Failed to list objects: {error_code} - {error_message}"
+            ) from e
+
+        except (EndpointConnectionError, BotoConnectionError) as e:
+            logger.error("Cannot connect to S3 endpoint: %s", str(e))
+            raise S3OperationError(f"Cannot connect to S3 endpoint: {str(e)}") from e
+
+        except Exception as e:
+            logger.error("Unexpected error during S3 list_objects: %s", str(e))
+            raise S3OperationError(f"Unexpected error during list_objects: {str(e)}") from e
