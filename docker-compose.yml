@@ -1,0 +1,18 @@
+networks:
+  agent:
+
+services:
+  mcp-server:
+    image: mcp-server:1.0.0
+    container_name: mcp-server
+    build:
+      context: ./
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    networks:
+      - agent
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./src:/app/src
