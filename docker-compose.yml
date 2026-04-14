@@ -1,5 +1,6 @@
 networks:
-  agent:
+  agent-network:
+    external: true
 
 services:
   mcp-server:
@@ -11,7 +12,7 @@ services:
     env_file:
       - .env
     networks:
-      - agent
+      - agent-network
     ports:
       - "${PORT:-8000}:8000"
     volumes:

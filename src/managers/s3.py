@@ -17,9 +17,14 @@ from botocore.exceptions import BotoCoreError, ClientError
 from botocore.exceptions import ConnectionError as BotoConnectionError
 from botocore.exceptions import EndpointConnectionError
 
-from monitoring.otel import setup_logging
+import logging
 
-logger = setup_logging()
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] [%(name)s] %(message)s"
+)
+
+logger = logging.getLogger("s3-manager")
 
 
 class S3ConnectionError(Exception):
